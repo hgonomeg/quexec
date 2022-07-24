@@ -3,10 +3,10 @@ use clap::Parser;
 use std::{process::Stdio, sync::Arc};
 use tokio::{
     fs,
-    io::{AsyncBufRead, AsyncBufReadExt, BufReader},
+    io::{AsyncBufReadExt, BufReader},
     process::Command,
     runtime,
-    sync::{OwnedSemaphorePermit, Semaphore},
+    sync::{mpsc, OwnedSemaphorePermit, Semaphore},
 };
 
 /// Simple utility to queue commands to be run
@@ -55,15 +55,35 @@ async fn runner(command: String, cfg: RunnerConfig, perm: OwnedSemaphorePermit) 
         })
         .stderr(output_stdio())
         .stdout(output_stdio());
-    if let Err(e) = command.status().await {
-        eprintln!(
-            "Error running child process \"{}\" with args {:#?}: {}",
-            parts[0],
-            &parts[1..],
-            e
-        );
+    if !cfg.inherit_output {
+        eprintln!("Starting job.");
+    }
+    match command.status().await {
+        Err(e) => {
+            eprintln!(
+                "Error running child process \"{}\" with args {:#?}: {}",
+                parts[0],
+                &parts[1..],
+                e
+            );
+        }
+        Ok(status) => {
+            if !cfg.inherit_output {
+                if status.success() {
+                    eprintln!("Job finished.");
+                } else {
+                    eprintln!("Job failed.");
+                }
+            }
+        }
     }
     drop(perm);
+}
+
+async fn awaiter_loop(mut rx: mpsc::Receiver<tokio::task::JoinHandle<()>>) {
+    while let Some(job) = rx.recv().await {
+        let _ = job.await;
+    }
 }
 
 fn main() -> anyhow::Result<()> {
@@ -71,7 +91,11 @@ fn main() -> anyhow::Result<()> {
     let rt = runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
-    rt.block_on(async move {
+    let (tx, rx) = mpsc::channel(cfg.jobs as usize);
+    let wait_for_all = rt.spawn(async move {
+        awaiter_loop(rx).await;
+    });
+    let res = rt.block_on(async move {
         let input = fs::OpenOptions::new()
             .read(true)
             .open(
@@ -87,8 +111,12 @@ fn main() -> anyhow::Result<()> {
         let rt_conf = RunnerConfig::from(cfg);
         while let Some(line) = lines.next_line().await? {
             let perm = semaphore.clone().acquire_owned().await.unwrap();
-            tokio::spawn(runner(line.clone(), rt_conf.clone(), perm));
+            tx.send(tokio::spawn(runner(line.clone(), rt_conf.clone(), perm)))
+                .await
+                .unwrap();
         }
         Ok(())
-    })
+    });
+    rt.block_on(wait_for_all)?;
+    res
 }
