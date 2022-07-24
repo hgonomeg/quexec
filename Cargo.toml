@@ -7,4 +7,5 @@ edition = "2021"
 
 [dependencies]
 anyhow = "*"
-tokio = { version = "*", features = ["io-util","process","rt","fs","time"] }
+tokio = { version = "1", features = ["io-util","process","rt","fs","time","sync"] }
+clap = { version = "3.2", features = ["derive"] }
