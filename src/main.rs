@@ -35,9 +35,8 @@ impl From<Config> for RunnerConfig {
     }
 }
 
-async fn runner(command: String, cfg: RunnerConfig, perm: OwnedSemaphorePermit) {
-    let parts: Vec<&str> = command.split_ascii_whitespace().collect();
-    let mut command = Command::new(parts[0]);
+async fn runner(command_str: String, cfg: RunnerConfig, perm: OwnedSemaphorePermit) {
+    let mut command = Command::new("sh");
     let output_stdio = || {
         if cfg.inherit_output {
             Stdio::inherit()
@@ -46,7 +45,7 @@ async fn runner(command: String, cfg: RunnerConfig, perm: OwnedSemaphorePermit) 
         }
     };
     command
-        .args(&parts[1..])
+        .args(&["-c", &command_str])
         .kill_on_drop(false)
         .stdin(if cfg.inherit_input {
             Stdio::inherit()
@@ -56,23 +55,18 @@ async fn runner(command: String, cfg: RunnerConfig, perm: OwnedSemaphorePermit) 
         .stderr(output_stdio())
         .stdout(output_stdio());
     if !cfg.inherit_output {
-        eprintln!("Starting job.");
+        eprintln!("Starting job \"{}\" .",&command_str);
     }
     match command.status().await {
         Err(e) => {
-            eprintln!(
-                "Error running child process \"{}\" with args {:#?}: {}",
-                parts[0],
-                &parts[1..],
-                e
-            );
+            eprintln!("Error running job \"{}\": {}", &command_str, e);
         }
         Ok(status) => {
             if !cfg.inherit_output {
                 if status.success() {
-                    eprintln!("Job finished.");
+                    eprintln!("Job \"{}\" finished.",&command_str);
                 } else {
-                    eprintln!("Job failed.");
+                    eprintln!("Job \"{}\" failed.",&command_str);
                 }
             }
         }
