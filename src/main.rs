@@ -74,7 +74,7 @@ async fn runner(command_str: String, cfg: RunnerConfig, perm: OwnedSemaphorePerm
     drop(perm);
 }
 
-async fn awaiter_loop(mut rx: mpsc::Receiver<tokio::task::JoinHandle<()>>) {
+async fn awaiter_loop(mut rx: mpsc::UnboundedReceiver<tokio::task::JoinHandle<()>>) {
     while let Some(job) = rx.recv().await {
         let _ = job.await;
     }
@@ -85,7 +85,7 @@ fn main() -> anyhow::Result<()> {
     let rt = runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
-    let (tx, rx) = mpsc::channel(cfg.jobs as usize);
+    let (tx, rx) = mpsc::unbounded_channel();
     let wait_for_all = rt.spawn(async move {
         awaiter_loop(rx).await;
     });
@@ -106,7 +106,6 @@ fn main() -> anyhow::Result<()> {
         while let Some(line) = lines.next_line().await? {
             let perm = semaphore.clone().acquire_owned().await.unwrap();
             tx.send(tokio::spawn(runner(line.clone(), rt_conf.clone(), perm)))
-                .await
                 .unwrap();
         }
         Ok(())
