@@ -55,7 +55,7 @@ async fn runner(command_str: String, cfg: RunnerConfig, perm: OwnedSemaphorePerm
         .stderr(output_stdio())
         .stdout(output_stdio());
     if !cfg.inherit_output {
-        eprintln!("Starting job \"{}\" .",&command_str);
+        eprintln!("Starting job \"{}\".",&command_str);
     }
     match command.status().await {
         Err(e) => {
