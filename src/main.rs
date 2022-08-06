@@ -94,8 +94,7 @@ fn main() -> anyhow::Result<()> {
             .read(true)
             .open(
                 &cfg.filename
-                    .as_ref()
-                    .map(String::as_str)
+                    .as_deref()
                     .unwrap_or("/dev/stdin"),
             )
             .await?;
