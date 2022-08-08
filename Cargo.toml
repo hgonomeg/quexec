@@ -11,6 +11,6 @@ strip = true
 
 
 [dependencies]
-anyhow = "*"
+anyhow = "1"
 tokio = { version = "1", features = ["io-util","process","rt","fs","time","sync"] }
 clap = { version = "3.2", features = ["derive"] }
